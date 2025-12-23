@@ -20,12 +20,18 @@ export default function SetupPage() {
   // Check if user is authenticated
   useEffect(() => {
     async function checkAuth() {
-      const user = await getCurrentUser()
-      if (!user) {
-        router.push("/auth/signin")
-        return
+      try {
+        const user = await getCurrentUser()
+        if (!user) {
+          router.push("/auth/signin")
+          return
+        }
+        setCheckingAuth(false)
+      } catch (error) {
+        console.error("[Setup] Auth check error:", error)
+        // If auth check fails, still allow access (user can sign in)
+        setCheckingAuth(false)
       }
-      setCheckingAuth(false)
     }
     checkAuth()
   }, [router])
