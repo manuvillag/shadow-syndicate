@@ -1,64 +1,68 @@
 import { ResourceChip } from "./resource-chip"
-import { Zap, Droplet, Users } from "lucide-react"
+import { Zap, Droplet, Heart } from "lucide-react"
 
 interface HudBarProps {
   credits: number
   alloy: number
-  level: number
   xpCurrent: number
   xpMax: number
   charge: number
   chargeMax: number
   adrenal: number
   adrenalMax: number
-  crewSize: number
-  crewMax: number
+  health?: number
+  healthMax?: number
+  chargeRegenTime?: string
+  adrenalRegenTime?: string
+  healthRegenTime?: string
 }
 
 export function HudBar({
   credits,
   alloy,
-  level,
   xpCurrent,
   xpMax,
   charge,
   chargeMax,
   adrenal,
   adrenalMax,
-  crewSize,
-  crewMax,
+  health,
+  healthMax,
+  chargeRegenTime,
+  adrenalRegenTime,
+  healthRegenTime,
 }: HudBarProps) {
   const xpPercent = (xpCurrent / xpMax) * 100
 
   return (
     <div className="w-full bg-card/90 backdrop-blur-md border-b border-border">
-      {/* Top row - Resources */}
-      <div className="flex items-center justify-between gap-2 px-3 py-2 border-b border-border/50">
-        <div className="flex items-center gap-2 flex-wrap">
-          <ResourceChip label="Credits" value={credits.toLocaleString()} variant="cyan" />
-          <ResourceChip label="Alloy" value={alloy} variant="purple" />
-          <ResourceChip label="Level" value={level} variant="orange" />
-        </div>
-        <div className="flex items-center gap-2">
+      {/* Top row - Main Resources (horizontal scrollable for mobile) */}
+      <div className="flex items-center gap-2 px-3 py-2 border-b border-border/50 overflow-x-auto scrollbar-hide">
+        <ResourceChip label="Credits" value={credits.toLocaleString()} variant="cyan" />
+        <ResourceChip label="Alloy" value={alloy} variant="purple" />
+        <ResourceChip
+          label="Charge"
+          value={`${charge}/${chargeMax}`}
+          icon={<Zap className="w-3 h-3" />}
+          variant="cyan"
+          timer={charge < chargeMax ? chargeRegenTime : undefined}
+        />
+        <ResourceChip
+          label="Adrenal"
+          value={`${adrenal}/${adrenalMax}`}
+          icon={<Droplet className="w-3 h-3" />}
+          variant="purple"
+          timer={adrenal < adrenalMax ? adrenalRegenTime : undefined}
+        />
+        {health !== undefined && healthMax !== undefined && (
           <ResourceChip
-            label="Charge"
-            value={`${charge}/${chargeMax}`}
-            icon={<Zap className="w-3 h-3" />}
-            variant="cyan"
+            label="Health"
+            value={`${health}/${healthMax}`}
+            icon={<Heart className="w-3 h-3" />}
+            variant="destructive"
+            timer={health < healthMax ? healthRegenTime : undefined}
           />
-          <ResourceChip
-            label="Adrenal"
-            value={`${adrenal}/${adrenalMax}`}
-            icon={<Droplet className="w-3 h-3" />}
-            variant="purple"
-          />
-          <ResourceChip
-            label="Crew"
-            value={`${crewSize}/${crewMax}`}
-            icon={<Users className="w-3 h-3" />}
-            variant="default"
-          />
-        </div>
+        )}
       </div>
 
       {/* XP Progress bar */}

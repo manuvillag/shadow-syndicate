@@ -25,37 +25,71 @@ export async function GET() {
       return NextResponse.json({ error: 'Player not found' }, { status: 404 })
     }
 
-    // Get recent activity (last 30 days)
+    // Get recent activity from multiple sources (last 30 days)
     const thirtyDaysAgo = new Date()
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
     const thirtyDaysAgoStr = thirtyDaysAgo.toISOString()
 
-    const { data: recentActivity } = await supabase
+    // Get activity from contracts
+    const { data: contractActivity } = await supabase
       .from('contract_executions')
       .select('executed_at')
       .eq('player_id', player.id)
       .gte('executed_at', thirtyDaysAgoStr)
-      .order('executed_at', { ascending: false })
 
-    // Calculate streak (simplified - checks if player had activity in last 7 days)
-    // In a real system, you'd track daily logins more precisely
+    // Get activity from skirmishes (combat_logs)
+    const { data: combatActivity } = await supabase
+      .from('combat_logs')
+      .select('fought_at')
+      .eq('player_id', player.id)
+      .gte('fought_at', thirtyDaysAgoStr)
+
+    // Combine all activity timestamps
+    const allActivity: { date: string }[] = []
+    if (contractActivity) {
+      allActivity.push(...contractActivity.map(a => ({ date: a.executed_at })))
+    }
+    if (combatActivity) {
+      allActivity.push(...combatActivity.map(a => ({ date: a.fought_at })))
+    }
+
+    // Calculate streak: count consecutive days with activity
     const today = new Date()
     today.setUTCHours(0, 0, 0, 0)
     
+    // Collect unique activity days
     const activityDays = new Set<string>()
-    if (recentActivity) {
-      for (const activity of recentActivity) {
-        const date = new Date(activity.executed_at)
-        date.setUTCHours(0, 0, 0, 0)
-        activityDays.add(date.toISOString())
+    for (const activity of allActivity) {
+      const date = new Date(activity.date)
+      date.setUTCHours(0, 0, 0, 0)
+      activityDays.add(date.toISOString())
+    }
+
+    // Calculate current streak (consecutive days from today backwards)
+    let currentStreak = 0
+    
+    // Check if there's activity today
+    const todayStr = today.toISOString()
+    if (activityDays.has(todayStr)) {
+      // Count backwards from today
+      for (let i = 0; i < 30; i++) {
+        const dateToCheck = new Date(today)
+        dateToCheck.setDate(dateToCheck.getDate() - i)
+        dateToCheck.setUTCHours(0, 0, 0, 0)
+        const dateStr = dateToCheck.toISOString()
+        
+        if (activityDays.has(dateStr)) {
+          currentStreak++
+        } else {
+          break // Streak broken
+        }
       }
     }
 
-    // Simple streak calculation: count consecutive days with activity
-    let currentStreak = 0
+    // Calculate longest streak (check all 30 days)
     let longestStreak = 0
     let tempStreak = 0
-
+    
     for (let i = 0; i < 30; i++) {
       const checkDate = new Date(today)
       checkDate.setDate(checkDate.getDate() - i)
@@ -64,19 +98,10 @@ export async function GET() {
 
       if (activityDays.has(dateStr)) {
         tempStreak++
-        if (i === 0) {
-          currentStreak = tempStreak
-        }
         longestStreak = Math.max(longestStreak, tempStreak)
       } else {
         tempStreak = 0
       }
-    }
-
-    // If no activity today, streak is 0
-    const todayStr = today.toISOString()
-    if (!activityDays.has(todayStr)) {
-      currentStreak = 0
     }
 
     return NextResponse.json({

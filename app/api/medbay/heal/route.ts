@@ -47,7 +47,7 @@ export async function POST(request: Request) {
     if (type === 'instant') {
       // Instant heal with alloy
       const alloyCost = 50
-      const healAmount = player.health_max - player.health
+      const healAmount = Math.max(0, player.health_max - player.health)
 
       if (player.alloy < alloyCost) {
         return NextResponse.json({ 

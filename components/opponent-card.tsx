@@ -16,6 +16,8 @@ interface OpponentCardProps {
   currentAdrenal: number
   onEngage: () => void
   cooldown?: number
+  difficulty?: string
+  description?: string
 }
 
 export function OpponentCard({
@@ -29,9 +31,19 @@ export function OpponentCard({
   currentAdrenal,
   onEngage,
   cooldown = 0,
+  difficulty: dbDifficulty,
+  description,
 }: OpponentCardProps) {
   const powerDiff = powerLevel - playerPower
-  const difficulty = powerDiff > 20 ? "Extreme" : powerDiff > 10 ? "Hard" : powerDiff > 0 ? "Moderate" : "Easy"
+  // Calculate win chance based on power difference (same as combat logic)
+  // If playerPower > powerLevel (negative diff), win chance increases
+  const baseWinChance = 0.5 - (powerDiff / 10) * 0.01
+  const winChance = Math.max(0.1, Math.min(0.9, baseWinChance))
+  
+  // Use database difficulty if available, otherwise calculate from power diff
+  const difficulty = dbDifficulty 
+    ? dbDifficulty.charAt(0).toUpperCase() + dbDifficulty.slice(1)
+    : powerDiff > 20 ? "Extreme" : powerDiff > 10 ? "Hard" : powerDiff > 0 ? "Moderate" : "Easy"
   const difficultyColor =
     difficulty === "Extreme"
       ? "text-red-500"
@@ -94,6 +106,15 @@ export function OpponentCard({
                 </span>
                 <span className="text-xs text-muted-foreground font-mono bg-background/50 px-1.5 py-0.5 rounded">
                   PWR: {powerLevel}
+                </span>
+                <span className={cn(
+                  "text-[10px] font-mono px-1.5 py-0.5 rounded",
+                  winChance >= 0.7 ? "text-neon-cyan bg-neon-cyan/10" :
+                  winChance >= 0.5 ? "text-yellow-500 bg-yellow-500/10" :
+                  winChance >= 0.3 ? "text-orange-500 bg-orange-500/10" :
+                  "text-red-500 bg-red-500/10"
+                )}>
+                  {Math.round(winChance * 100)}% win
                 </span>
               </div>
             </div>

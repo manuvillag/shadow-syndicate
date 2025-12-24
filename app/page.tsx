@@ -1,14 +1,12 @@
 "use client"
 
-import { HudBar } from "@/components/hud-bar"
+import { GameLayout } from "@/components/game-layout"
 import { IdentityCard } from "@/components/identity-card"
 import { ActionTile } from "@/components/action-tile"
-import { BottomNav } from "@/components/bottom-nav"
-import { FileText, Package, Swords, Radio, Building2, Users, Settings, Heart, Eye } from "lucide-react"
+import { FileText, Package, Swords, Radio, Building2, Users, Settings, Heart, Eye, UserPlus, UsersRound } from "lucide-react"
 import { useRouter } from "next/navigation"
-import Image from "next/image"
 import { usePlayer } from "@/hooks/use-player"
-import { mapPlayerToHudData } from "@/lib/player-utils"
+import { mapPlayerToHudData, formatPlayerId } from "@/lib/player-utils"
 import { useEffect } from "react"
 
 export default function Dashboard() {
@@ -26,35 +24,25 @@ export default function Dashboard() {
     }
   }, [loading, error, player, router])
 
-  // Show loading state
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="text-center">
-          <div className="text-muted-foreground font-mono">Loading...</div>
-        </div>
-      </div>
-    )
-  }
+  // Don't block on loading - redirect happens in useEffect
+  // Show content progressively even if player is still loading
 
-  // Show error or no player state - redirect to setup
-  if (error || !player) {
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="text-center space-y-4">
-          <div className="text-muted-foreground font-mono">Redirecting to setup...</div>
-        </div>
-      </div>
-    )
+  // Map database fields to component props (with fallbacks)
+  const playerData = player ? mapPlayerToHudData(player) : {
+    credits: 0,
+    alloy: 0,
+    xpCurrent: 0,
+    xpMax: 1000,
+    charge: 0,
+    chargeMax: 100,
+    adrenal: 0,
+    adrenalMax: 50,
+    health: 100,
+    healthMax: 100,
   }
-
-  // Map database fields to component props
-  const playerData = {
-    ...mapPlayerToHudData(player),
-    handle: player.handle,
-    rank: player.rank,
-    syndicate: player.syndicate,
-  }
+  
+  // Format player ID for display
+  const playerId = player?.id ? formatPlayerId(player.id) : undefined
 
   const actions = [
     { label: "Contracts", icon: FileText, variant: "cyan" as const, href: "/contracts" },
@@ -63,35 +51,34 @@ export default function Dashboard() {
     { label: "Comms", icon: Radio, variant: "default" as const, href: "/comms" },
     { label: "Outposts", icon: Building2, variant: "cyan" as const, href: "/outposts" },
     { label: "Crew", icon: Users, variant: "default" as const, href: "/crew" },
+    { label: "Friends", icon: UserPlus, variant: "default" as const, href: "/friends" },
+    { label: "Syndicate", icon: UsersRound, variant: "purple" as const, href: "/syndicate" },
     { label: "Settings", icon: Settings, variant: "default" as const, href: "/settings" },
     { label: "Medbay", icon: Heart, variant: "purple" as const, href: "/medbay" },
     { label: "Overseer", icon: Eye, variant: "cyan" as const, href: "/overseer" },
   ]
 
   return (
-    <div className="min-h-screen bg-background pb-20 relative overflow-hidden">
-      <div className="fixed inset-0 z-0">
-        <Image
-          src="/.jpg?key=bg&height=800&width=400&query=dark space stars nebula purple blue cyberpunk subtle background"
-          alt="Background"
-          fill
-          className="object-cover opacity-10"
-          priority
-        />
-        <div className="absolute inset-0 bg-gradient-to-b from-background via-background/95 to-background" />
-      </div>
+    <GameLayout>
+      <div className="relative">
+        {/* Content */}
+        <div>
+          {/* Identity Card - improved spacing */}
+          {player && (
+            <IdentityCard 
+              handle={player.handle || 'OPERATOR'} 
+              rank={player.rank || 'Initiate'} 
+              syndicate={player.syndicate || 'Independent'}
+              level={player.level}
+              playerId={playerId}
+              crewSize={player.crew_size}
+              crewMax={player.crew_max}
+            />
+          )}
 
-      {/* Content */}
-      <div className="relative z-10">
-        {/* HUD Bar */}
-        <HudBar {...playerData} />
-
-        {/* Identity Card */}
-        <IdentityCard handle={playerData.handle} rank={playerData.rank} syndicate={playerData.syndicate} />
-
-        {/* Action Grid */}
-        <div className="px-3 pb-4">
-          <h3 className="text-sm uppercase tracking-wider text-muted-foreground font-mono mb-3">Operations</h3>
+        {/* Action Grid - improved spacing */}
+        <div className="px-3 pb-6">
+          <h3 className="text-xs uppercase tracking-wider text-muted-foreground font-mono mb-4 px-1">Operations</h3>
           <div className="grid grid-cols-3 gap-3">
             {actions.map((action, index) => (
               <ActionTile
@@ -106,9 +93,7 @@ export default function Dashboard() {
           </div>
         </div>
       </div>
-
-      {/* Bottom Navigation */}
-      <BottomNav activeTab="home" onTabChange={(tab) => router.push(tab === "home" ? "/" : `/${tab}`)} />
-    </div>
+      </div>
+    </GameLayout>
   )
 }

@@ -1,18 +1,14 @@
 "use client"
 
-import { HudBar } from "@/components/hud-bar"
-import { BottomNav } from "@/components/bottom-nav"
+import { GameLayout } from "@/components/game-layout"
 import { CrewStatsCard } from "@/components/crew-stats-card"
 import { CrewMemberCard } from "@/components/crew-member-card"
 import { CrewMarketplaceCard } from "@/components/crew-marketplace-card"
 import { ArrowLeft } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { usePlayer } from "@/hooks/use-player"
-import { mapPlayerToHudData } from "@/lib/player-utils"
 import { useEffect, useState } from "react"
 import { useToast } from "@/hooks/use-toast"
-import { PageLoadingSkeleton } from "@/components/loading-skeletons"
-import { ErrorPage } from "@/components/error-display"
 import Link from "next/link"
 import { Card } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -145,8 +141,8 @@ export default function CrewPage() {
       if (crewRes.ok) {
         const crewData = await crewRes.json()
         setCrewMembers(crewData.crew || [])
-        setCrewSize(crewData.stats?.crewSize ?? player.crew_size)
-        setCrewMax(crewData.stats?.crewMax ?? player.crew_max)
+        setCrewSize(crewData.stats?.crewSize ?? player?.crew_size ?? 0)
+        setCrewMax(crewData.stats?.crewMax ?? player?.crew_max ?? 5)
         setTotalAttack(crewData.stats?.totalAttack ?? 0)
         setTotalDefense(crewData.stats?.totalDefense ?? 0)
         setTotalPower(crewData.stats?.totalPower ?? 0)
@@ -172,25 +168,10 @@ export default function CrewPage() {
     }
   }
 
-  // Show loading state
-  if (loading || loadingCrew) {
-    return <PageLoadingSkeleton />
-  }
-
-  // Show error state
-  if (error || !player) {
-    return (
-      <ErrorPage
-        error={error || "Player not found"}
-        onRetry={() => window.location.reload()}
-      />
-    )
-  }
-
-  const playerData = mapPlayerToHudData(player)
+  // Don't block on loading - show content progressively
 
   // Calculate next milestone (5, 10, 15, 20, 25, etc.)
-  const currentCrewSize = crewSize ?? player.crew_size
+  const currentCrewSize = crewSize ?? player?.crew_size ?? 0
   const milestones = [5, 10, 15, 20, 25, 30]
   const nextMilestone = milestones.find(m => m > currentCrewSize) || milestones[milestones.length - 1]
   const milestoneIndex = milestones.indexOf(nextMilestone)
@@ -202,9 +183,7 @@ export default function CrewPage() {
                    "+300 Base Power"
 
   return (
-    <div className="min-h-screen bg-background pb-20">
-      {/* HUD Bar */}
-      <HudBar {...playerData} />
+    <GameLayout>
 
       <div className="p-4 space-y-4">
         {/* Header */}
@@ -219,8 +198,8 @@ export default function CrewPage() {
         </div>
         {/* Crew Stats */}
         <CrewStatsCard
-          crewSize={crewSize ?? player.crew_size}
-          crewMax={crewMax ?? player.crew_max}
+          crewSize={crewSize ?? player?.crew_size ?? 0}
+          crewMax={crewMax ?? player?.crew_max ?? 5}
           totalAttack={totalAttack}
           totalDefense={totalDefense}
           totalPower={totalPower}
@@ -269,8 +248,8 @@ export default function CrewPage() {
                   price={crew.price}
                   levelRequirement={crew.level_requirement}
                   description={crew.description}
-                  playerLevel={player.level}
-                  playerCredits={player.credits}
+                  playerLevel={player?.level || 0}
+                  playerCredits={player?.credits || 0}
                   onPurchase={() => handlePurchase(crew.id)}
                   purchasing={purchasing === crew.id}
                 />
@@ -301,8 +280,6 @@ export default function CrewPage() {
 
       </div>
 
-      {/* Bottom Navigation */}
-      <BottomNav activeTab="crew" onTabChange={(tab) => router.push(tab === "home" ? "/" : `/${tab}`)} />
-    </div>
+    </GameLayout>
   )
 }

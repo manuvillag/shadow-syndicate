@@ -1,22 +1,19 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { HudBar } from "@/components/hud-bar"
-import { BottomNav } from "@/components/bottom-nav"
+import { GameLayout } from "@/components/game-layout"
 import { OpponentCard } from "@/components/opponent-card"
 import { FightResultModal } from "@/components/fight-result-modal"
 import { ArrowLeft } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { usePlayer } from "@/hooks/use-player"
-import { mapPlayerToHudData } from "@/lib/player-utils"
-import { PageLoadingSkeleton } from "@/components/loading-skeletons"
-import { ErrorPage } from "@/components/error-display"
 import { useToast } from "@/hooks/use-toast"
 import { Card } from "@/components/ui/card"
+import { PowerDisplay } from "@/components/power-display"
 import Link from "next/link"
 
 interface Opponent {
-  id: number
+  id: string
   name: string
   avatar: string
   powerLevel: number
@@ -24,6 +21,8 @@ interface Opponent {
   xp: number
   adrenalCost: number
   cooldown: number
+  difficulty?: string
+  description?: string
 }
 
 export default function SkirmishPage() {
@@ -35,11 +34,36 @@ export default function SkirmishPage() {
   const [showResult, setShowResult] = useState(false)
   const [fightResult, setFightResult] = useState<any>(null)
   const [engaging, setEngaging] = useState(false)
+  const [playerPower, setPlayerPower] = useState<number>(0)
+  const [powerBreakdown, setPowerBreakdown] = useState<any>(null)
+
+  // Fetch player power (includes equipment and crew)
+  useEffect(() => {
+    async function fetchPlayerPower() {
+      try {
+        const response = await fetch("/api/skirmish/power")
+        if (response.ok) {
+          const data = await response.json()
+          setPlayerPower(data.totalPower || 0)
+          setPowerBreakdown(data.breakdown || null)
+        }
+      } catch (error) {
+        console.error("[Skirmish] Error fetching power:", error)
+        // Fallback to level-based power
+        setPlayerPower((player?.level || 0) * 50)
+      }
+    }
+
+    if (player) {
+      fetchPlayerPower()
+    }
+  }, [player])
 
   // Fetch opponents
   useEffect(() => {
     async function fetchOpponents() {
       try {
+        setLoadingOpponents(true)
         const response = await fetch("/api/skirmish/opponents")
         if (!response.ok) {
           throw new Error('Failed to fetch opponents')
@@ -63,24 +87,10 @@ export default function SkirmishPage() {
     if (player) {
       fetchOpponents()
     }
-  }, [player, toast])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [player])
 
-  // Show loading state
-  if (loading || loadingOpponents) {
-    return <PageLoadingSkeleton />
-  }
-
-  // Show error state
-  if (error || !player) {
-    return (
-      <ErrorPage
-        error={error || "Player not found"}
-        onRetry={() => window.location.reload()}
-      />
-    )
-  }
-
-  const playerData = mapPlayerToHudData(player)
+  // Don't block on loading - show content progressively
 
   const handleEngage = async (opponent: Opponent) => {
     if (engaging) return
@@ -122,7 +132,7 @@ export default function SkirmishPage() {
       setShowResult(true)
       refetchPlayer() // Refresh player data
       
-      // Refresh opponents after combat
+      // Refresh opponents after combat (to show cooldowns)
       const oppResponse = await fetch("/api/skirmish/opponents")
       if (oppResponse.ok) {
         const oppData = await oppResponse.json()
@@ -143,9 +153,7 @@ export default function SkirmishPage() {
   }
 
   return (
-    <div className="min-h-screen bg-background pb-20">
-      {/* HUD Bar */}
-      <HudBar {...playerData} />
+    <GameLayout>
 
       <div className="p-4 space-y-4">
         {/* Header */}
@@ -159,13 +167,22 @@ export default function SkirmishPage() {
           </div>
         </div>
 
+        {/* Power Display */}
+        {powerBreakdown && (
+          <PowerDisplay 
+            totalPower={playerPower} 
+            breakdown={powerBreakdown}
+            playerLevel={player?.level}
+          />
+        )}
+
         {/* Opponent List */}
         <div className="space-y-3">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between mb-2">
             <h2 className="text-sm uppercase tracking-wider text-muted-foreground font-mono">Available Targets</h2>
-            <span className="text-xs font-mono text-muted-foreground bg-background/50 px-2 py-1 rounded">
-              Power: {player.level}
-            </span>
+            <p className="text-[10px] text-muted-foreground font-mono">
+              Refreshes every 30 minutes
+            </p>
           </div>
           {opponents.length === 0 ? (
             <Card className="p-8 text-center border-dashed">
@@ -177,8 +194,8 @@ export default function SkirmishPage() {
               <OpponentCard
                 key={opponent.id}
                 {...opponent}
-                playerPower={player.level}
-                currentAdrenal={player.adrenal}
+                playerPower={playerPower}
+                currentAdrenal={player?.adrenal || 0}
                 onEngage={() => handleEngage(opponent)}
               />
             ))
@@ -186,8 +203,6 @@ export default function SkirmishPage() {
         </div>
       </div>
 
-      {/* Bottom Navigation */}
-      <BottomNav activeTab="skirmish" onTabChange={(tab) => router.push(tab === "home" ? "/" : `/${tab}`)} />
 
       {/* Fight Result Modal */}
       {fightResult && (
@@ -200,6 +215,6 @@ export default function SkirmishPage() {
           result={fightResult}
         />
       )}
-    </div>
+    </GameLayout>
   )
 }

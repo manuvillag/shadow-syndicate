@@ -1,7 +1,6 @@
 "use client"
 
-import { HudBar } from "@/components/hud-bar"
-import { BottomNav } from "@/components/bottom-nav"
+import { GameLayout } from "@/components/game-layout"
 import { EventBanner } from "@/components/event-banner"
 import { StreakTracker } from "@/components/streak-tracker"
 import { MissionCard } from "@/components/mission-card"
@@ -11,7 +10,6 @@ import { ArrowLeft } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { usePlayer } from "@/hooks/use-player"
-import { mapPlayerToHudData } from "@/lib/player-utils"
 import { useState, useEffect } from "react"
 
 export default function OverseerPage() {
@@ -52,33 +50,8 @@ export default function OverseerPage() {
     fetchData()
   }, [player])
 
-  // Show loading state
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="text-muted-foreground font-mono">Loading...</div>
-      </div>
-    )
-  }
-
-  // Show error state
-  if (error || !player) {
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="text-center space-y-4">
-          <div className="text-destructive font-mono">{error || "Player not found"}</div>
-        </div>
-      </div>
-    )
-  }
-
-  const playerData = mapPlayerToHudData(player)
-
-
   return (
-    <div className="min-h-screen bg-background pb-20">
-      {/* HUD Bar */}
-      <HudBar {...playerData} />
+    <GameLayout>
 
       {/* Header */}
       <div className="sticky top-0 z-10 bg-card/90 backdrop-blur-md border-b border-border px-3 py-3">
@@ -149,8 +122,6 @@ export default function OverseerPage() {
         </div>
       </div>
 
-      {/* Bottom Navigation */}
-      <BottomNav activeTab="home" onTabChange={(tab) => router.push(tab === "home" ? "/" : `/${tab}`)} />
-    </div>
+    </GameLayout>
   )
 }

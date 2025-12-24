@@ -1,19 +1,19 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { HudBar } from "@/components/hud-bar"
+import { GameLayout } from "@/components/game-layout"
 import { ItemCard } from "@/components/item-card"
-import { BottomNav } from "@/components/bottom-nav"
+import { ItemMarketplaceCard } from "@/components/item-marketplace-card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { ArrowLeft, Sword, Shield, Zap, Package, X } from "lucide-react"
+import { ArrowLeft, Sword, Shield, Zap, Package, X, Store } from "lucide-react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { usePlayer } from "@/hooks/use-player"
-import { mapPlayerToHudData } from "@/lib/player-utils"
+import { mapPlayerToHudData, formatPlayerId } from "@/lib/player-utils"
 import { useToast } from "@/hooks/use-toast"
-import { PageLoadingSkeleton } from "@/components/loading-skeletons"
+import { ItemCardSkeleton } from "@/components/loading-skeletons"
 import { ErrorPage } from "@/components/error-display"
 import { Skeleton } from "@/components/ui/skeleton"
 
@@ -35,15 +35,21 @@ interface InventoryItem {
 
 export default function LoadoutPage() {
   const router = useRouter()
-  const { player, loading: playerLoading, error: playerError } = usePlayer()
+  const { player, loading: playerLoading, error: playerError, refetch: refetchPlayer } = usePlayer()
   const { toast } = useToast()
   const [inventory, setInventory] = useState<InventoryItem[]>([])
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(false) // Start false, only show when actually loading
   const [equipping, setEquipping] = useState<string | null>(null)
+  const [marketplaceItems, setMarketplaceItems] = useState<any[]>([])
+  const [loadingMarketplace, setLoadingMarketplace] = useState(false)
+  const [purchasing, setPurchasing] = useState<string | null>(null)
 
   // Fetch inventory
   useEffect(() => {
     async function fetchInventory() {
+      if (!player) return
+      
+      setLoading(true)
       try {
         const res = await fetch('/api/inventory')
         if (!res.ok) {
@@ -65,8 +71,85 @@ export default function LoadoutPage() {
 
     if (player) {
       fetchInventory()
+      // Also fetch marketplace on initial load
+      fetchMarketplace()
     }
   }, [player, toast])
+
+  // Fetch marketplace
+  const fetchMarketplace = async () => {
+    if (!player) return
+    
+    // Only show loading if we have no items yet
+    if (marketplaceItems.length === 0) {
+      setLoadingMarketplace(true)
+    }
+    
+    try {
+      const res = await fetch('/api/items/marketplace')
+      if (!res.ok) {
+        throw new Error('Failed to fetch marketplace')
+      }
+      const data = await res.json()
+      setMarketplaceItems(data.items || [])
+    } catch (error) {
+      console.error('[Loadout] Error fetching marketplace:', error)
+      toast({
+        title: "Error",
+        description: "Failed to load marketplace",
+        variant: "destructive",
+      })
+    } finally {
+      setLoadingMarketplace(false)
+    }
+  }
+
+  // Handle purchase
+  const handlePurchase = async (itemId: string) => {
+    if (purchasing || !player) return
+
+    setPurchasing(itemId)
+    try {
+      const res = await fetch('/api/items/purchase', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ templateId: itemId }),
+      })
+
+      if (!res.ok) {
+        const data = await res.json()
+        throw new Error(data.error || 'Failed to purchase item')
+      }
+
+      const data = await res.json()
+      
+      // Refresh inventory and marketplace
+      const invRes = await fetch('/api/inventory')
+      if (invRes.ok) {
+        const invData = await invRes.json()
+        setInventory(invData.items || [])
+      }
+      
+      fetchMarketplace()
+      
+      // Refetch player to update credits
+      refetchPlayer()
+
+      toast({
+        title: "Purchased!",
+        description: data.message || "Item added to inventory",
+      })
+    } catch (error) {
+      console.error('[Loadout] Purchase error:', error)
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to purchase item",
+        variant: "destructive",
+      })
+    } finally {
+      setPurchasing(null)
+    }
+  }
 
   // Handle equip
   const handleEquip = async (inventoryItem: InventoryItem) => {
@@ -159,13 +242,8 @@ export default function LoadoutPage() {
     }
   }
 
-  // Show loading state
-  if (playerLoading || loading) {
-    return <PageLoadingSkeleton />
-  }
-
-  // Show error state
-  if (playerError || !player) {
+  // Show error state (but still render if we have player data)
+  if (playerError && !player) {
     return (
       <ErrorPage
         error={playerError || "Player not found"}
@@ -174,7 +252,21 @@ export default function LoadoutPage() {
     )
   }
 
-  const playerStats = mapPlayerToHudData(player)
+  // Format player ID for display
+  const playerId = player?.id ? formatPlayerId(player.id) : undefined
+  
+  const playerStats = player ? mapPlayerToHudData(player) : {
+    credits: 0,
+    alloy: 0,
+    xpCurrent: 0,
+    xpMax: 1000,
+    charge: 0,
+    chargeMax: 100,
+    adrenal: 0,
+    adrenalMax: 50,
+    health: 100,
+    healthMax: 100,
+  }
 
   // Filter inventory by type
   const weapons = inventory.filter((inv) => inv.item.type === 'weapon')
@@ -205,8 +297,7 @@ export default function LoadoutPage() {
   })
 
   return (
-    <div className="min-h-screen bg-background pb-20">
-      <HudBar {...playerStats} />
+    <GameLayout>
 
       <div className="p-4 space-y-4">
         {/* Header */}
@@ -316,40 +407,217 @@ export default function LoadoutPage() {
           </div>
         </Card>
 
-        {/* Inventory Tabs */}
-        <Tabs defaultValue="weapons" className="w-full">
-          <TabsList className="grid w-full grid-cols-4 bg-card border border-border">
+        {/* Main Tabs: Shop | Inventory */}
+        <Tabs 
+          defaultValue="shop" 
+          className="w-full"
+          onValueChange={(value) => {
+            if (value === 'shop') {
+              fetchMarketplace()
+            }
+          }}
+        >
+          <TabsList className="grid w-full grid-cols-2 bg-card border border-border mb-4">
             <TabsTrigger
-              value="weapons"
-              className="data-[state=active]:bg-destructive/20 data-[state=active]:text-destructive"
-            >
-              <Sword className="w-4 h-4 mr-2" />
-              Weapons
-            </TabsTrigger>
-            <TabsTrigger
-              value="armor"
+              value="shop"
               className="data-[state=active]:bg-neon-cyan/20 data-[state=active]:text-neon-cyan"
             >
-              <Shield className="w-4 h-4 mr-2" />
-              Armor
+              <Store className="w-4 h-4 mr-2" />
+              Shop
             </TabsTrigger>
             <TabsTrigger
-              value="gadgets"
+              value="inventory"
               className="data-[state=active]:bg-neon-purple/20 data-[state=active]:text-neon-purple"
             >
-              <Zap className="w-4 h-4 mr-2" />
-              Gadgets
-            </TabsTrigger>
-            <TabsTrigger
-              value="consumables"
-              className="data-[state=active]:bg-success/20 data-[state=active]:text-success"
-            >
               <Package className="w-4 h-4 mr-2" />
-              Items
+              Inventory
             </TabsTrigger>
           </TabsList>
 
-          <TabsContent value="weapons" className="space-y-3 mt-4">
+          {/* Shop Tab */}
+          <TabsContent value="shop" className="space-y-3">
+            <Tabs defaultValue="weapons" className="w-full">
+              <TabsList className="grid w-full grid-cols-3 bg-card/50 border border-border mb-4">
+                <TabsTrigger
+                  value="weapons"
+                  className="data-[state=active]:bg-destructive/20 data-[state=active]:text-destructive"
+                >
+                  <Sword className="w-4 h-4 mr-2" />
+                  Weapons
+                </TabsTrigger>
+                <TabsTrigger
+                  value="armor"
+                  className="data-[state=active]:bg-neon-cyan/20 data-[state=active]:text-neon-cyan"
+                >
+                  <Shield className="w-4 h-4 mr-2" />
+                  Armor
+                </TabsTrigger>
+                <TabsTrigger
+                  value="gadgets"
+                  className="data-[state=active]:bg-neon-purple/20 data-[state=active]:text-neon-purple"
+                >
+                  <Zap className="w-4 h-4 mr-2" />
+                  Gadgets
+                </TabsTrigger>
+              </TabsList>
+
+              <TabsContent value="weapons" className="space-y-3">
+                {loadingMarketplace && marketplaceItems.length === 0 ? (
+                  <div className="grid grid-cols-1 gap-3">
+                    {[1, 2].map((i) => (
+                      <Skeleton key={i} className="h-20 w-full opacity-40" />
+                    ))}
+                  </div>
+                ) : marketplaceItems.filter(i => i.type === 'weapon').length === 0 ? (
+                  <Card className="p-8 text-center border-dashed">
+                    <Sword className="w-12 h-12 text-muted-foreground/30 mx-auto mb-3" />
+                    <p className="text-sm font-semibold text-foreground mb-1">No weapons available</p>
+                    <p className="text-xs text-muted-foreground">Check back later for new items!</p>
+                  </Card>
+                ) : (
+                  <div className="grid grid-cols-1 gap-3">
+                    {marketplaceItems.filter(i => i.type === 'weapon').map((item) => (
+                      <ItemMarketplaceCard
+                        key={item.id}
+                        id={item.id}
+                        name={item.name}
+                        rarity={item.rarity}
+                        type={item.type}
+                        attackBoost={item.attackBoost}
+                        defenseBoost={item.defenseBoost}
+                        specialBoost={item.specialBoost}
+                        price={item.price}
+                        levelRequirement={item.levelRequirement}
+                        description={item.description}
+                        playerLevel={player?.level || 1}
+                        playerCredits={player?.credits || 0}
+                        onPurchase={() => handlePurchase(item.id)}
+                        purchasing={purchasing === item.id}
+                        locked={item.locked}
+                        isOwned={item.isOwned}
+                      />
+                    ))}
+                  </div>
+                )}
+              </TabsContent>
+
+              <TabsContent value="armor" className="space-y-3">
+                {loadingMarketplace && marketplaceItems.length === 0 ? (
+                  <div className="grid grid-cols-1 gap-3">
+                    {[1, 2].map((i) => (
+                      <Skeleton key={i} className="h-20 w-full opacity-40" />
+                    ))}
+                  </div>
+                ) : marketplaceItems.filter(i => i.type === 'armor').length === 0 ? (
+                  <Card className="p-8 text-center border-dashed">
+                    <Shield className="w-12 h-12 text-muted-foreground/30 mx-auto mb-3" />
+                    <p className="text-sm font-semibold text-foreground mb-1">No armor available</p>
+                    <p className="text-xs text-muted-foreground">Check back later for new items!</p>
+                  </Card>
+                ) : (
+                  <div className="grid grid-cols-1 gap-3">
+                    {marketplaceItems.filter(i => i.type === 'armor').map((item) => (
+                      <ItemMarketplaceCard
+                        key={item.id}
+                        id={item.id}
+                        name={item.name}
+                        rarity={item.rarity}
+                        type={item.type}
+                        attackBoost={item.attackBoost}
+                        defenseBoost={item.defenseBoost}
+                        specialBoost={item.specialBoost}
+                        price={item.price}
+                        levelRequirement={item.levelRequirement}
+                        description={item.description}
+                        playerLevel={player?.level || 1}
+                        playerCredits={player?.credits || 0}
+                        onPurchase={() => handlePurchase(item.id)}
+                        purchasing={purchasing === item.id}
+                        locked={item.locked}
+                        isOwned={item.isOwned}
+                      />
+                    ))}
+                  </div>
+                )}
+              </TabsContent>
+
+              <TabsContent value="gadgets" className="space-y-3">
+                {loadingMarketplace && marketplaceItems.length === 0 ? (
+                  <div className="grid grid-cols-1 gap-3">
+                    {[1, 2].map((i) => (
+                      <Skeleton key={i} className="h-20 w-full opacity-40" />
+                    ))}
+                  </div>
+                ) : marketplaceItems.filter(i => i.type === 'gadget').length === 0 ? (
+                  <Card className="p-8 text-center border-dashed">
+                    <Zap className="w-12 h-12 text-muted-foreground/30 mx-auto mb-3" />
+                    <p className="text-sm font-semibold text-foreground mb-1">No gadgets available</p>
+                    <p className="text-xs text-muted-foreground">Check back later for new items!</p>
+                  </Card>
+                ) : (
+                  <div className="grid grid-cols-1 gap-3">
+                    {marketplaceItems.filter(i => i.type === 'gadget').map((item) => (
+                      <ItemMarketplaceCard
+                        key={item.id}
+                        id={item.id}
+                        name={item.name}
+                        rarity={item.rarity}
+                        type={item.type}
+                        attackBoost={item.attackBoost}
+                        defenseBoost={item.defenseBoost}
+                        specialBoost={item.specialBoost}
+                        price={item.price}
+                        levelRequirement={item.levelRequirement}
+                        description={item.description}
+                        playerLevel={player?.level || 1}
+                        playerCredits={player?.credits || 0}
+                        onPurchase={() => handlePurchase(item.id)}
+                        purchasing={purchasing === item.id}
+                        locked={item.locked}
+                        isOwned={item.isOwned}
+                      />
+                    ))}
+                  </div>
+                )}
+              </TabsContent>
+            </Tabs>
+          </TabsContent>
+
+          {/* Inventory Tab */}
+          <TabsContent value="inventory" className="space-y-3">
+            <Tabs defaultValue="weapons" className="w-full">
+              <TabsList className="grid w-full grid-cols-4 bg-card/50 border border-border mb-4">
+                <TabsTrigger
+                  value="weapons"
+                  className="data-[state=active]:bg-destructive/20 data-[state=active]:text-destructive"
+                >
+                  <Sword className="w-4 h-4 mr-2" />
+                  Weapons
+                </TabsTrigger>
+                <TabsTrigger
+                  value="armor"
+                  className="data-[state=active]:bg-neon-cyan/20 data-[state=active]:text-neon-cyan"
+                >
+                  <Shield className="w-4 h-4 mr-2" />
+                  Armor
+                </TabsTrigger>
+                <TabsTrigger
+                  value="gadgets"
+                  className="data-[state=active]:bg-neon-purple/20 data-[state=active]:text-neon-purple"
+                >
+                  <Zap className="w-4 h-4 mr-2" />
+                  Gadgets
+                </TabsTrigger>
+                <TabsTrigger
+                  value="consumables"
+                  className="data-[state=active]:bg-success/20 data-[state=active]:text-success"
+                >
+                  <Package className="w-4 h-4 mr-2" />
+                  Items
+                </TabsTrigger>
+              </TabsList>
+
+              <TabsContent value="weapons" className="space-y-3">
             {weapons.length === 0 ? (
               <Card className="p-8 text-center border-dashed">
                 <Sword className="w-12 h-12 text-muted-foreground/30 mx-auto mb-3" />
@@ -367,8 +635,14 @@ export default function LoadoutPage() {
             )}
           </TabsContent>
 
-          <TabsContent value="armor" className="space-y-3 mt-4">
-            {armor.length === 0 ? (
+              <TabsContent value="armor" className="space-y-3">
+            {loading && armor.length === 0 && inventory.length === 0 ? (
+              <div className="grid grid-cols-1 gap-3">
+                {[1, 2].map((i) => (
+                  <ItemCardSkeleton key={i} />
+                ))}
+              </div>
+            ) : armor.length === 0 ? (
               <Card className="p-8 text-center border-dashed">
                 <Shield className="w-12 h-12 text-muted-foreground/30 mx-auto mb-3" />
                 <p className="text-sm font-semibold text-foreground mb-1">No armor in inventory</p>
@@ -385,8 +659,14 @@ export default function LoadoutPage() {
             )}
           </TabsContent>
 
-          <TabsContent value="gadgets" className="space-y-3 mt-4">
-            {gadgets.length === 0 ? (
+              <TabsContent value="gadgets" className="space-y-3">
+            {loading && gadgets.length === 0 && inventory.length === 0 ? (
+              <div className="grid grid-cols-1 gap-3">
+                {[1, 2].map((i) => (
+                  <ItemCardSkeleton key={i} />
+                ))}
+              </div>
+            ) : gadgets.length === 0 ? (
               <Card className="p-8 text-center border-dashed">
                 <Zap className="w-12 h-12 text-muted-foreground/30 mx-auto mb-3" />
                 <p className="text-sm font-semibold text-foreground mb-1">No gadgets in inventory</p>
@@ -403,7 +683,7 @@ export default function LoadoutPage() {
             )}
           </TabsContent>
 
-          <TabsContent value="consumables" className="space-y-3 mt-4">
+              <TabsContent value="consumables" className="space-y-3">
             {consumables.length === 0 ? (
               <Card className="p-8 text-center border-dashed">
                 <Package className="w-12 h-12 text-muted-foreground/30 mx-auto mb-3" />
@@ -428,12 +708,12 @@ export default function LoadoutPage() {
                 ))}
               </>
             )}
+              </TabsContent>
+            </Tabs>
           </TabsContent>
         </Tabs>
       </div>
 
-      {/* BottomNav for consistent navigation */}
-      <BottomNav activeTab="home" onTabChange={(tab) => router.push(tab === "home" ? "/" : `/${tab}`)} />
-    </div>
+    </GameLayout>
   )
 }

@@ -1,7 +1,6 @@
 "use client"
 
-import { HudBar } from "@/components/hud-bar"
-import { BottomNav } from "@/components/bottom-nav"
+import { GameLayout } from "@/components/game-layout"
 import { HealthStatusCard } from "@/components/health-status-card"
 import { HealOptionsCard } from "@/components/heal-options-card"
 import { CombatLogCard } from "@/components/combat-log-card"
@@ -11,12 +10,11 @@ import { useRouter } from "next/navigation"
 import { useState, useEffect } from "react"
 import { useToast } from "@/hooks/use-toast"
 import { usePlayer } from "@/hooks/use-player"
-import { mapPlayerToHudData } from "@/lib/player-utils"
 
 export default function MedbayPage() {
   const router = useRouter()
   const { toast } = useToast()
-  const { player, loading, error } = usePlayer()
+  const { player, loading, error, refetch: refetchPlayer } = usePlayer()
   const [combatLogs, setCombatLogs] = useState<any[]>([])
   const [loadingLogs, setLoadingLogs] = useState(true)
 
@@ -51,29 +49,9 @@ export default function MedbayPage() {
     }
   }, [player])
 
-  // Show loading state
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="text-muted-foreground font-mono">Loading...</div>
-      </div>
-    )
-  }
-
-  // Show error state
-  if (error || !player) {
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="text-center space-y-4">
-          <div className="text-destructive font-mono">{error || "Player not found"}</div>
-        </div>
-      </div>
-    )
-  }
-
-  const playerData = mapPlayerToHudData(player)
-  const currentHealth = player.health
-  const maxHealth = player.health_max
+  // Don't block on loading - show content progressively
+  const currentHealth = player?.health || 100
+  const maxHealth = player?.health_max || 100
 
   // Calculate time until full regeneration
   const healthMissing = maxHealth - currentHealth
@@ -104,7 +82,7 @@ export default function MedbayPage() {
           className: "bg-card border-success",
         })
         // Refresh player data
-        window.location.reload() // Simple refresh to update HUD
+        refetchPlayer()
       } else {
         toast({
           title: "Natural Regeneration Active",
@@ -123,9 +101,7 @@ export default function MedbayPage() {
   }
 
   return (
-    <div className="min-h-screen bg-background pb-20">
-      {/* HUD Bar */}
-      <HudBar {...playerData} />
+    <GameLayout>
 
       {/* Header */}
       <div className="sticky top-0 z-10 bg-card/90 backdrop-blur-md border-b border-border px-3 py-3">
@@ -150,7 +126,7 @@ export default function MedbayPage() {
           currentHealth={currentHealth} 
           maxHealth={maxHealth} 
           alloyCost={50} 
-          playerAlloy={player.alloy || 0}
+          playerAlloy={player?.alloy || 0}
           onHeal={handleHeal} 
         />
 
@@ -168,8 +144,6 @@ export default function MedbayPage() {
         </div>
       </div>
 
-      {/* Bottom Navigation */}
-      <BottomNav activeTab="home" onTabChange={(tab) => router.push(tab === "home" ? "/" : `/${tab}`)} />
-    </div>
+    </GameLayout>
   )
 }

@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label"
 import { Card } from "@/components/ui/card"
 import { useToast } from "@/hooks/use-toast"
 import { signUp } from "@/lib/auth"
+import { parseAuthError, getAuthErrorTitle } from "@/lib/auth-error-handler"
 
 export default function SignUpPage() {
   const router = useRouter()
@@ -20,10 +21,31 @@ export default function SignUpPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
-    if (!email.trim() || !password.trim()) {
+    // Validate email
+    if (!email.trim()) {
       toast({
-        title: "Fields required",
-        description: "Please enter email and password",
+        title: "Email required",
+        description: "Please enter your email address",
+        variant: "destructive",
+      })
+      return
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+    if (!emailRegex.test(email.trim())) {
+      toast({
+        title: "Invalid email",
+        description: "Please enter a valid email address",
+        variant: "destructive",
+      })
+      return
+    }
+
+    // Validate password
+    if (!password.trim()) {
+      toast({
+        title: "Password required",
+        description: "Please enter a password",
         variant: "destructive",
       })
       return
@@ -32,7 +54,7 @@ export default function SignUpPage() {
     if (password.length < 6) {
       toast({
         title: "Password too short",
-        description: "Password must be at least 6 characters",
+        description: "Password must be at least 6 characters long",
         variant: "destructive",
       })
       return
@@ -46,8 +68,8 @@ export default function SignUpPage() {
 
       if (authError) {
         toast({
-          title: "Sign up failed",
-          description: authError.message || "Failed to create account",
+          title: getAuthErrorTitle(authError),
+          description: parseAuthError(authError),
           variant: "destructive",
         })
         setLoading(false)
@@ -57,7 +79,7 @@ export default function SignUpPage() {
       if (!authData.user) {
         toast({
           title: "Sign up failed",
-          description: "Account created but user not found",
+          description: "Account creation failed. Please try again.",
           variant: "destructive",
         })
         setLoading(false)
@@ -66,12 +88,8 @@ export default function SignUpPage() {
 
       // Check if email confirmation is required
       if (authData.user && !authData.session) {
-        toast({
-          title: "Check your email",
-          description: "Please confirm your email address, then sign in to create your player profile.",
-          variant: "default",
-        })
-        router.push("/auth/signin")
+        // Show success message and redirect to verification page
+        router.push(`/auth/verify-email?email=${encodeURIComponent(email.trim())}`)
         setLoading(false)
         return
       }
@@ -90,8 +108,8 @@ export default function SignUpPage() {
     } catch (error) {
       console.error("[SignUp] Error:", error)
       toast({
-        title: "Error",
-        description: error instanceof Error ? error.message : "Failed to create account",
+        title: getAuthErrorTitle(error),
+        description: parseAuthError(error),
         variant: "destructive",
       })
       setLoading(false)

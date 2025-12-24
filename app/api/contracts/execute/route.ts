@@ -1,5 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
+import { handleApiError, createErrorResponse } from '@/lib/api-error-handler'
+import { getRankForLevel, calculateXPForLevel } from '@/lib/level-system'
 
 export async function POST(request: Request) {
   try {
@@ -186,10 +188,25 @@ export async function POST(request: Request) {
 
     // Calculate new XP and check for level up
     const newXp = currentPlayer.xp_current + xpGained
-    const leveledUp = newXp >= currentPlayer.xp_max
-    const newLevel = leveledUp ? currentPlayer.level + 1 : currentPlayer.level
-    const newXpMax = leveledUp ? currentPlayer.xp_max * 1.5 : currentPlayer.xp_max // Increase XP needed by 50% per level
-    const finalXp = leveledUp ? newXp - currentPlayer.xp_max : newXp
+    let currentLevel = currentPlayer.level
+    let remainingXP = newXp
+    let finalLevel = currentLevel
+    
+    // Handle multiple level ups if XP gain is large
+    while (finalLevel < 100) {
+      const xpNeededForCurrentLevel = calculateXPForLevel(finalLevel)
+      if (remainingXP >= xpNeededForCurrentLevel) {
+        remainingXP -= xpNeededForCurrentLevel
+        finalLevel++
+      } else {
+        break
+      }
+    }
+    
+    const leveledUp = finalLevel > currentLevel
+    const newXpMax = calculateXPForLevel(finalLevel + 1)
+    const finalXP = remainingXP
+    const newLevel = finalLevel
 
     // Calculate final credits (success gets reward, failure loses penalty)
     const finalCredits = success 
@@ -199,16 +216,18 @@ export async function POST(request: Request) {
     // Calculate new health (apply health loss on failure)
     const newHealth = Math.max(0, currentPlayer.health - healthLoss)
 
-    // Update player
+    // Update player (including rank if leveled up)
+    const newRank = leveledUp ? getRankForLevel(newLevel) : currentPlayer.rank
     const { error: updateError } = await supabase
       .from('players')
       .update({
         charge: currentPlayer.charge - contract.energy_cost, // Always consume energy
         credits: finalCredits,
         health: newHealth,
-        xp_current: finalXp,
+        xp_current: finalXP,
         xp_max: newXpMax,
         level: newLevel,
+        rank: newRank,
         updated_at: new Date().toISOString(),
       })
       .eq('id', currentPlayer.id)
@@ -248,7 +267,7 @@ export async function POST(request: Request) {
           : 'Mission failed. Lost 25% of potential reward and took damage.'
       },
       xpProgress: {
-        current: finalXp,
+        current: finalXP,
         max: newXpMax,
         gained: xpGained,
         leveledUp,
@@ -262,7 +281,7 @@ export async function POST(request: Request) {
     })
   } catch (error) {
     console.error('[API] Contract execution error:', error)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    return handleApiError(error, 'Failed to execute contract')
   }
 }
 

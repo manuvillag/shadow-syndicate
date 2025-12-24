@@ -10,7 +10,7 @@ import { Separator } from "@/components/ui/separator"
 import { BottomNav } from "@/components/bottom-nav"
 import { useState, useEffect } from "react"
 import { signOut } from "@/lib/auth"
-import { usePlayer } from "@/hooks/use-player"
+import { usePlayer, clearPlayerCache } from "@/hooks/use-player"
 import { createClient } from "@/lib/supabase/client"
 
 export default function SettingsPage() {
@@ -150,6 +150,7 @@ export default function SettingsPage() {
                 variant="destructive"
                 className="w-full"
                 onClick={async () => {
+                  clearPlayerCache() // Clear player cache before signing out
                   await signOut()
                   router.push("/auth/signin")
                   router.refresh()

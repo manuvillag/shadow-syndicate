@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
+import { getRankForLevel } from '@/lib/level-system'
 
 export async function GET(request: Request) {
   try {
@@ -40,7 +41,63 @@ export async function GET(request: Request) {
       .eq('id', player.id)
       .single()
 
-    return NextResponse.json({ player: updatedPlayer || player })
+    const finalPlayer = updatedPlayer || player
+
+    // Get syndicate name if player is in one
+    let syndicateName = 'Independent'
+    if (finalPlayer.syndicate_id) {
+      const { data: syndicate } = await supabase
+        .from('syndicates')
+        .select('name')
+        .eq('id', finalPlayer.syndicate_id)
+        .single()
+      
+      if (syndicate) {
+        syndicateName = syndicate.name
+      }
+    }
+
+    // Check and update rank if it doesn't match the level
+    const expectedRank = getRankForLevel(finalPlayer.level)
+    if (finalPlayer.rank !== expectedRank) {
+      // Update rank to match level
+      const { data: rankUpdatedPlayer } = await supabase
+        .from('players')
+        .update({ rank: expectedRank })
+        .eq('id', finalPlayer.id)
+        .select()
+        .single()
+
+      if (rankUpdatedPlayer) {
+        // Get syndicate name for updated player
+        let updatedSyndicateName = 'Independent'
+        if (rankUpdatedPlayer.syndicate_id) {
+          const { data: updatedSyndicate } = await supabase
+            .from('syndicates')
+            .select('name')
+            .eq('id', rankUpdatedPlayer.syndicate_id)
+            .single()
+          
+          if (updatedSyndicate) {
+            updatedSyndicateName = updatedSyndicate.name
+          }
+        }
+
+        const playerData = {
+          ...rankUpdatedPlayer,
+          syndicate: updatedSyndicateName,
+        }
+        return NextResponse.json({ player: playerData })
+      }
+    }
+
+    // Format player data with syndicate name
+    const playerData = {
+      ...finalPlayer,
+      syndicate: syndicateName,
+    }
+
+    return NextResponse.json({ player: playerData })
   } catch (error) {
     console.error('[API] Player fetch error:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
@@ -96,7 +153,7 @@ export async function POST(request: Request) {
       alloy: 0,
       level: 1,
       xp_current: 0,
-      xp_max: 1000,
+      xp_max: 500,
       charge: 100,
       charge_max: 100,
       adrenal: 50,

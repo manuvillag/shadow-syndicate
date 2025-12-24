@@ -1,18 +1,17 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { HudBar } from "@/components/hud-bar"
+import { GameLayout } from "@/components/game-layout"
 import { FilterChip } from "@/components/filter-chip"
 import { ContractCard } from "@/components/contract-card"
 import { ContractConfirmationModal } from "@/components/contract-confirmation-modal"
 import { ResultModal } from "@/components/result-modal"
-import { BottomNav } from "@/components/bottom-nav"
 import { ArrowLeft } from "lucide-react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { usePlayer } from "@/hooks/use-player"
 import { mapPlayerToHudData } from "@/lib/player-utils"
-import { PageLoadingSkeleton, ContractCardSkeleton } from "@/components/loading-skeletons"
+import { ContractCardSkeleton } from "@/components/loading-skeletons"
 import { ErrorPage } from "@/components/error-display"
 import { parseApiError } from "@/lib/api-error-handler"
 
@@ -67,18 +66,7 @@ export default function ContractsPage() {
     fetchContracts()
   }, [])
 
-  // Show loading state
-  if (playerLoading || loading) {
-    return <PageLoadingSkeleton />
-  }
-
-  // Show error state
-  if (playerError || !player) {
-    return <ErrorPage error={playerError || "Player not found"} onRetry={() => window.location.reload()} />
-  }
-
-  // Map database fields to component props
-  const playerStats = mapPlayerToHudData(player)
+  // Don't block on loading - show content progressively
 
   // Map contracts to component format
   const mappedContracts = contracts.map((c) => ({
@@ -143,9 +131,7 @@ export default function ContractsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-background pb-20">
-      <HudBar {...playerStats} />
-
+    <GameLayout>
       <div className="p-4 space-y-4">
         {/* Header */}
         <div className="flex items-center gap-3 mb-4">
@@ -194,7 +180,7 @@ export default function ContractsPage() {
           creditsReward={selectedContract.creditsReward}
           xpReward={selectedContract.xpReward}
           lootChance={selectedContract.lootChance}
-          currentCharge={playerStats.charge}
+          currentCharge={player?.charge || 0}
           onConfirm={handleConfirmContract}
         />
       )}
@@ -217,7 +203,6 @@ export default function ContractsPage() {
       )}
 
       {/* Bottom Nav */}
-      <BottomNav activeTab="contracts" onTabChange={(tab) => router.push(tab === "home" ? "/" : `/${tab}`)} />
-    </div>
+    </GameLayout>
   )
 }

@@ -112,21 +112,21 @@ export function ListSkeleton({ count = 5 }: { count?: number }) {
 
 export function ItemCardSkeleton() {
   return (
-    <Card className="p-3 border-2">
+    <Card className="p-3 border-2 opacity-40">
       <div className="flex gap-3">
-        <Skeleton className="h-16 w-16 rounded-lg flex-shrink-0" />
+        <Skeleton className="h-16 w-16 rounded-lg flex-shrink-0 opacity-50" />
         <div className="flex-1 space-y-2">
           <div className="flex items-start justify-between">
             <div className="flex-1 space-y-2">
-              <Skeleton className="h-4 w-3/4" />
-              <Skeleton className="h-3 w-1/3" />
+              <Skeleton className="h-4 w-3/4 opacity-50" />
+              <Skeleton className="h-3 w-1/3 opacity-50" />
             </div>
           </div>
           <div className="flex gap-2">
-            <Skeleton className="h-5 w-16 rounded" />
-            <Skeleton className="h-5 w-16 rounded" />
+            <Skeleton className="h-5 w-16 rounded opacity-50" />
+            <Skeleton className="h-5 w-16 rounded opacity-50" />
           </div>
-          <Skeleton className="h-8 w-full rounded mt-auto" />
+          <Skeleton className="h-8 w-full rounded mt-auto opacity-50" />
         </div>
       </div>
     </Card>

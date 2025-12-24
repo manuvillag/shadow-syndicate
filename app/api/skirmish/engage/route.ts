@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
+import { getRankForLevel, calculateXPForLevel } from '@/lib/level-system'
 
 interface CombatResult {
   outcome: 'win' | 'lose'
@@ -121,10 +122,33 @@ export async function POST(request: Request) {
     const totalCrewDefense = (crew || []).reduce((sum, m) => sum + (m.defense || 0), 0)
     const totalCrewPower = totalCrewAttack + totalCrewDefense
 
-    // Calculate player power: base level + crew power
-    // Each level contributes ~50 power, crew power is direct addition
+    // Get equipped items and calculate equipment stats
+    const { data: inventory } = await supabase
+      .from('player_inventory')
+      .select(`
+        items (
+          attack_boost,
+          defense_boost
+        )
+      `)
+      .eq('player_id', player.id)
+      .eq('equipped', true)
+
+    const totalItemAttack = (inventory || []).reduce((sum, inv) => {
+      const item = inv.items as any
+      return sum + (item?.attack_boost || 0)
+    }, 0)
+
+    const totalItemDefense = (inventory || []).reduce((sum, inv) => {
+      const item = inv.items as any
+      return sum + (item?.defense_boost || 0)
+    }, 0)
+
+    // Calculate player power: base level + crew power + equipment stats
+    // Each level contributes ~50 power, crew power is direct addition, equipment adds to attack/defense
     const playerBasePower = player.level * 50
-    const playerTotalPower = playerBasePower + totalCrewPower
+    const equipmentPower = totalItemAttack + totalItemDefense
+    const playerTotalPower = playerBasePower + totalCrewPower + equipmentPower
 
     // Calculate combat result using total power
     const combatResult = calculateCombat(playerTotalPower, opponentPowerLevel)
@@ -136,23 +160,40 @@ export async function POST(request: Request) {
 
     // Calculate new XP and check for level up
     const newXp = player.xp_current + combatResult.xpGained
-    const leveledUp = newXp >= player.xp_max
-    const newLevel = leveledUp ? player.level + 1 : player.level
-    const newXpMax = leveledUp ? player.xp_max * 1.5 : player.xp_max
-    const finalXp = leveledUp ? newXp - player.xp_max : newXp
+    let currentLevel = player.level
+    let remainingXP = newXp
+    let finalLevel = currentLevel
+    
+    // Handle multiple level ups if XP gain is large
+    while (finalLevel < 100) {
+      const xpNeededForCurrentLevel = calculateXPForLevel(finalLevel)
+      if (remainingXP >= xpNeededForCurrentLevel) {
+        remainingXP -= xpNeededForCurrentLevel
+        finalLevel++
+      } else {
+        break
+      }
+    }
+    
+    const leveledUp = finalLevel > currentLevel
+    const newXpMax = calculateXPForLevel(finalLevel + 1)
+    const finalXP = remainingXP
+    const newLevel = finalLevel
 
     // Get opponent name (for logging)
     const opponentName = body.opponentName || `Opponent_${opponentId}`
 
-    // Update player
+    // Update player (including rank if leveled up)
+    const newRank = leveledUp ? getRankForLevel(newLevel) : player.rank
     const { error: updateError } = await supabase
       .from('players')
       .update({
         adrenal: player.adrenal - adrenalCost,
         credits: player.credits + combatResult.creditsEarned,
-        xp_current: finalXp,
+        xp_current: finalXP,
         xp_max: newXpMax,
         level: newLevel,
+        rank: newRank,
         health: newHealth,
         updated_at: new Date().toISOString(),
       })
@@ -226,7 +267,7 @@ export async function POST(request: Request) {
       }
     }
 
-    // Log combat
+    // Log combat (opponent_id is optional, only if column exists)
     await supabase.from('combat_logs').insert({
       player_id: player.id,
       opponent_name: opponentName,
@@ -238,10 +279,31 @@ export async function POST(request: Request) {
       loot_received: combatResult.loot || null,
     })
 
+    // Set opponent cooldown (15 minutes after fighting, or use opponent's base cooldown)
+    const { data: opponent } = await supabase
+      .from('opponents')
+      .select('cooldown_minutes')
+      .eq('id', opponentId)
+      .single()
+
+    const baseCooldownMinutes = opponent?.cooldown_minutes || 15
+    const cooldownUntil = new Date(Date.now() + baseCooldownMinutes * 60 * 1000)
+
+    await supabase
+      .from('opponent_cooldowns')
+      .upsert({
+        player_id: player.id,
+        opponent_id: opponentId,
+        fought_at: new Date().toISOString(),
+        cooldown_until: cooldownUntil.toISOString(),
+      }, {
+        onConflict: 'player_id,opponent_id'
+      })
+
     return NextResponse.json({
       ...combatResult,
       xpProgress: {
-        current: finalXp,
+        current: finalXP,
         max: newXpMax,
         gained: combatResult.xpGained,
         leveledUp,

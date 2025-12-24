@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
+import { getRankForLevel, calculateXPForLevel } from '@/lib/level-system'
 
 /**
  * Claim rewards for a completed daily mission
@@ -23,7 +24,7 @@ export async function POST(request: Request) {
     // Get player
     const { data: player, error: playerError } = await supabase
       .from('players')
-      .select('id, credits, xp, level')
+      .select('id, credits, xp_current, xp_max, level, rank')
       .eq('user_id', user.id)
       .single()
 
@@ -104,26 +105,38 @@ export async function POST(request: Request) {
 
     // Calculate new values
     const newCredits = player.credits + config.rewards.credits
-    const newXp = player.xp + config.rewards.xp
+    const newXp = player.xp_current + config.rewards.xp
 
     // Check for level up
-    const xpForNextLevel = Math.floor(100 * Math.pow(1.5, player.level))
-    let newLevel = player.level
+    let currentLevel = player.level
     let remainingXp = newXp
-
-    // Calculate level ups
-    while (remainingXp >= xpForNextLevel && newLevel < 100) {
-      remainingXp -= xpForNextLevel
-      newLevel++
+    let finalLevel = currentLevel
+    
+    // Handle multiple level ups if XP gain is large
+    while (finalLevel < 100) {
+      const xpNeededForCurrentLevel = calculateXPForLevel(finalLevel)
+      if (remainingXp >= xpNeededForCurrentLevel) {
+        remainingXp -= xpNeededForCurrentLevel
+        finalLevel++
+      } else {
+        break
+      }
     }
+    
+    const leveledUp = finalLevel > currentLevel
+    const newXpMax = calculateXPForLevel(finalLevel + 1)
+    const newLevel = finalLevel
+    const newRank = leveledUp ? getRankForLevel(newLevel) : player.rank
 
     // Update player
     const { error: updateError } = await supabase
       .from('players')
       .update({
         credits: newCredits,
-        xp: remainingXp,
+        xp_current: remainingXp,
+        xp_max: newXpMax,
         level: newLevel,
+        rank: newRank,
         updated_at: new Date().toISOString(),
       })
       .eq('id', player.id)

@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label"
 import { Card } from "@/components/ui/card"
 import { useToast } from "@/hooks/use-toast"
 import { signIn } from "@/lib/auth"
+import { parseAuthError, getAuthErrorTitle } from "@/lib/auth-error-handler"
 
 export default function SignInPage() {
   const router = useRouter()
@@ -20,10 +21,30 @@ export default function SignInPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
-    if (!email.trim() || !password.trim()) {
+    // Validate email format
+    if (!email.trim()) {
       toast({
-        title: "Fields required",
-        description: "Please enter email and password",
+        title: "Email required",
+        description: "Please enter your email address",
+        variant: "destructive",
+      })
+      return
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+    if (!emailRegex.test(email.trim())) {
+      toast({
+        title: "Invalid email",
+        description: "Please enter a valid email address",
+        variant: "destructive",
+      })
+      return
+    }
+
+    if (!password.trim()) {
+      toast({
+        title: "Password required",
+        description: "Please enter your password",
         variant: "destructive",
       })
       return
@@ -32,22 +53,33 @@ export default function SignInPage() {
     setLoading(true)
 
     try {
-      const { data, error } = await signIn(email.trim(), password)
+      const result = await signIn(email.trim(), password)
+      const { data, error } = result || {}
+
+      // Log the full response for debugging
+      console.log("[SignIn] Sign in result:", { hasData: !!data, hasError: !!error, error })
 
       if (error) {
+        console.error("[SignIn] Auth error:", error)
+        const errorTitle = getAuthErrorTitle(error)
+        const errorMessage = parseAuthError(error)
+        console.log("[SignIn] Toast will show:", { errorTitle, errorMessage })
+        
         toast({
-          title: "Sign in failed",
-          description: error.message || "Invalid email or password",
+          title: errorTitle,
+          description: errorMessage,
           variant: "destructive",
         })
+        
         setLoading(false)
         return
       }
 
-      if (!data.user) {
+      if (!data || !data.user) {
+        console.error("[SignIn] No user data returned, result:", result)
         toast({
           title: "Sign in failed",
-          description: "User not found",
+          description: "Invalid email or password. Please check your credentials and try again.",
           variant: "destructive",
         })
         setLoading(false)
@@ -59,21 +91,28 @@ export default function SignInPage() {
         description: "Welcome back",
       })
 
-      // Check if player exists, if not redirect to setup
-      const playerResponse = await fetch("/api/player")
+      // Clear any cached player data and force refresh
+      // Use router.push with a timestamp to force a fresh load
+      const playerResponse = await fetch("/api/player", { 
+        cache: 'no-store',
+        headers: {
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          'Pragma': 'no-cache',
+        }
+      })
       const playerData = await playerResponse.json()
 
       if (!playerData.player) {
         router.push("/setup")
       } else {
-        router.push("/")
+        // Force a hard navigation to clear all caches
+        window.location.href = '/'
       }
-      router.refresh()
     } catch (error) {
       console.error("[SignIn] Error:", error)
       toast({
-        title: "Error",
-        description: error instanceof Error ? error.message : "Failed to sign in",
+        title: getAuthErrorTitle(error),
+        description: parseAuthError(error),
         variant: "destructive",
       })
       setLoading(false)
