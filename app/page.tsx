@@ -45,17 +45,21 @@ export default function Dashboard() {
   const playerId = player?.id ? formatPlayerId(player.id) : undefined
 
   const actions = [
+    // Core Gameplay - Primary actions
     { label: "Contracts", icon: FileText, variant: "cyan" as const, href: "/contracts" },
-    { label: "Loadout", icon: Package, variant: "default" as const, href: "/loadout" },
     { label: "Skirmish", icon: Swords, variant: "purple" as const, href: "/skirmish" },
-    { label: "Comms", icon: Radio, variant: "default" as const, href: "/comms" },
-    { label: "Outposts", icon: Building2, variant: "cyan" as const, href: "/outposts" },
     { label: "Crew", icon: Users, variant: "default" as const, href: "/crew" },
+    { label: "Outposts", icon: Building2, variant: "cyan" as const, href: "/outposts" },
+    { label: "Loadout", icon: Package, variant: "default" as const, href: "/loadout" },
+    // Social Features
     { label: "Friends", icon: UserPlus, variant: "default" as const, href: "/friends" },
     { label: "Syndicate", icon: UsersRound, variant: "purple" as const, href: "/syndicate" },
-    { label: "Settings", icon: Settings, variant: "default" as const, href: "/settings" },
+    // Utilities & Services
     { label: "Medbay", icon: Heart, variant: "purple" as const, href: "/medbay" },
     { label: "Overseer", icon: Eye, variant: "cyan" as const, href: "/overseer" },
+    { label: "Comms", icon: Radio, variant: "default" as const, href: "/comms" },
+    // Settings - Last
+    { label: "Settings", icon: Settings, variant: "default" as const, href: "/settings" },
   ]
 
   return (

@@ -69,7 +69,7 @@ export function mapPlayerToHudData(player: DatabasePlayer) {
         player.health,
         player.health_max,
         player.last_health_regen,
-        300 // 1 per 5 minutes
+        120 // 1 per 2 minutes
       )
     : undefined
 

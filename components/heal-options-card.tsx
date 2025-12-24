@@ -37,7 +37,7 @@ export function HealOptionsCard({ currentHealth, maxHealth, alloyCost, playerAll
           </div>
           <span className="text-xs text-success font-mono">FREE</span>
         </div>
-        <p className="text-xs text-muted-foreground">Restores +1 HP every 5 minutes</p>
+        <p className="text-xs text-muted-foreground">Restores +1 HP every 2 minutes</p>
         <Button
           variant="outline"
           className="w-full bg-transparent"

@@ -42,7 +42,7 @@ export function HealthStatusCard({ currentHealth, maxHealth, regenTime }: Health
         indicatorClassName={isInjured ? "bg-destructive" : "bg-success"}
       />
 
-      {isInjured && <div className="text-xs text-muted-foreground mt-2">Natural regeneration: +1 HP per 5 minutes</div>}
+      {isInjured && <div className="text-xs text-muted-foreground mt-2">Natural regeneration: +1 HP per 2 minutes</div>}
     </div>
   )
 }

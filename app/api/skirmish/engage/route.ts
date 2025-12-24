@@ -33,7 +33,9 @@ function calculateCombat(playerPower: number, opponentPowerLevel: number): Comba
     // Win: Deal damage, take less damage, get rewards
     const damageDealt = Math.floor(Math.random() * 300) + 200
     const damageTaken = Math.floor(Math.random() * 100) + 50
-    const creditsEarned = opponentPowerLevel * 150 + Math.floor(Math.random() * opponentPowerLevel * 50)
+    // Rebalanced credits: ~20-30 credits per power level (caps around 25k for high power opponents)
+    // Much lower than before to match contract rewards better
+    const creditsEarned = Math.floor(opponentPowerLevel * 25 + Math.random() * opponentPowerLevel * 10)
     const xpGained = opponentPowerLevel * 6 + Math.floor(Math.random() * opponentPowerLevel * 2)
     const streak = Math.floor(Math.random() * 5) + 1
     const gotLoot = Math.random() > 0.7
@@ -185,18 +187,27 @@ export async function POST(request: Request) {
 
     // Update player (including rank if leveled up)
     const newRank = leveledUp ? getRankForLevel(newLevel) : player.rank
+    
+    // If health decreased, reset last_health_regen so regeneration starts from now
+    const updateData: any = {
+      adrenal: player.adrenal - adrenalCost,
+      credits: player.credits + combatResult.creditsEarned,
+      xp_current: finalXP,
+      xp_max: newXpMax,
+      level: newLevel,
+      rank: newRank,
+      health: newHealth,
+      updated_at: new Date().toISOString(),
+    }
+    
+    // Reset health regeneration timer if health decreased
+    if (newHealth < player.health) {
+      updateData.last_health_regen = new Date().toISOString()
+    }
+    
     const { error: updateError } = await supabase
       .from('players')
-      .update({
-        adrenal: player.adrenal - adrenalCost,
-        credits: player.credits + combatResult.creditsEarned,
-        xp_current: finalXP,
-        xp_max: newXpMax,
-        level: newLevel,
-        rank: newRank,
-        health: newHealth,
-        updated_at: new Date().toISOString(),
-      })
+      .update(updateData)
       .eq('id', player.id)
 
     if (updateError) {

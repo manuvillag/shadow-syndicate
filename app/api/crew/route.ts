@@ -25,17 +25,22 @@ export async function GET() {
       return NextResponse.json({ error: playerError?.message || 'Player not found' }, { status: 404 })
     }
 
-    // Get crew members
+    // Get crew members - PostgREST has a default limit of 1000, but we should get all
+    // Use range() to explicitly get all rows (0 to 9999 should be enough for any player)
     const { data: crew, error } = await supabase
       .from('crew_members')
       .select('*')
       .eq('player_id', player.id)
       .order('created_at', { ascending: true })
+      .range(0, 9999) // Explicitly set range to get all crew members (up to 10k)
 
     if (error) {
+      console.error('[API] Crew fetch error:', error)
       const { error: errorMessage, status } = handleApiError(error, 'Crew fetch')
       return NextResponse.json(createErrorResponse(errorMessage, status), { status })
     }
+
+    console.log(`[API] Crew fetch: Found ${crew?.length || 0} crew members for player ${player.id} (crew_size: ${player.crew_size})`)
 
     // Calculate total crew power (sum of all attack + defense)
     const totalAttack = (crew || []).reduce((sum, member) => sum + (member.attack || 0), 0)

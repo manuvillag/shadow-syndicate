@@ -218,18 +218,27 @@ export async function POST(request: Request) {
 
     // Update player (including rank if leveled up)
     const newRank = leveledUp ? getRankForLevel(newLevel) : currentPlayer.rank
+    
+    // If health decreased, reset last_health_regen so regeneration starts from now
+    const updateData: any = {
+      charge: currentPlayer.charge - contract.energy_cost, // Always consume energy
+      credits: finalCredits,
+      health: newHealth,
+      xp_current: finalXP,
+      xp_max: newXpMax,
+      level: newLevel,
+      rank: newRank,
+      updated_at: new Date().toISOString(),
+    }
+    
+    // Reset health regeneration timer if health decreased
+    if (newHealth < currentPlayer.health) {
+      updateData.last_health_regen = new Date().toISOString()
+    }
+    
     const { error: updateError } = await supabase
       .from('players')
-      .update({
-        charge: currentPlayer.charge - contract.energy_cost, // Always consume energy
-        credits: finalCredits,
-        health: newHealth,
-        xp_current: finalXP,
-        xp_max: newXpMax,
-        level: newLevel,
-        rank: newRank,
-        updated_at: new Date().toISOString(),
-      })
+      .update(updateData)
       .eq('id', currentPlayer.id)
 
     if (updateError) {

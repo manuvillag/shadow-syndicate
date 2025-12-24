@@ -55,7 +55,7 @@ export default function MedbayPage() {
 
   // Calculate time until full regeneration
   const healthMissing = maxHealth - currentHealth
-  const minutesUntilFull = healthMissing * 5 // 1 HP per 5 minutes
+  const minutesUntilFull = healthMissing * 2 // 1 HP per 2 minutes
   const hours = Math.floor(minutesUntilFull / 60)
   const minutes = minutesUntilFull % 60
   const regenTime = healthMissing > 0 ? `${hours}:${minutes.toString().padStart(2, '0')}:00` : "0:00:00"
@@ -86,7 +86,7 @@ export default function MedbayPage() {
       } else {
         toast({
           title: "Natural Regeneration Active",
-          description: "Your health will restore naturally over time (+1 HP per 5 minutes)",
+          description: "Your health will restore naturally over time (+1 HP per 2 minutes)",
           className: "bg-card border-border",
         })
       }
